@@ -4,6 +4,8 @@ description: Set up or repair a long-lived Claude Code Remote Control session on
 argument-hint: [session-name] [working-directory]
 disable-model-invocation: true
 effort: medium
+license: MIT
+compatibility: Linux with systemd, requires tmux and claude CLI
 ---
 
 # setup-claude-remote
