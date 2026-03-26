@@ -20,7 +20,7 @@ This skill automates the entire setup to make Claude Code Remote Control survive
 |-------|-------|-------|---------|
 | **Process keeper** | tmux | tmux | Hidden PowerShell window |
 | **Service manager** | systemd `--user` | launchd (LaunchAgents) | Task Scheduler |
-| **Survive logout** | `loginctl enable-linger` | Built-in | Task Scheduler setting |
+| **Survive logout** | `loginctl enable-linger` | Built-in | S4U LogonType |
 | **Auto-start** | `systemctl enable` | `RunAtLoad` in plist | "At log on" trigger |
 | **Attach to session** | `tmux attach` | `tmux attach` | View log file |
 
@@ -132,8 +132,8 @@ launchctl list | grep com.claude.remote-control-my-project
 tail -f ~/Library/Logs/claude-remote-my-project.log
 
 # Restart the agent
-launchctl unload ~/Library/LaunchAgents/com.claude.remote-control-my-project.plist
-launchctl load ~/Library/LaunchAgents/com.claude.remote-control-my-project.plist
+launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.claude.remote-control-my-project.plist
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.claude.remote-control-my-project.plist
 ```
 
 ### Windows

@@ -254,28 +254,28 @@ $LogPath = "{{LOG_PATH}}"
 
 $ClaudeBin = (Get-Command claude -ErrorAction SilentlyContinue).Source
 if (-not $ClaudeBin) {
-    "$(Get-Date -Format o) ERROR: claude not found in PATH" | Out-File -FilePath $LogPath -Append
+    "$(Get-Date -Format o) ERROR: claude not found in PATH" | Out-File -FilePath $LogPath -Append -Encoding utf8
     exit 1
 }
 
 if (-not (Test-Path $WorkDir)) {
-    "$(Get-Date -Format o) ERROR: working directory not found: $WorkDir" | Out-File -FilePath $LogPath -Append
+    "$(Get-Date -Format o) ERROR: working directory not found: $WorkDir" | Out-File -FilePath $LogPath -Append -Encoding utf8
     exit 1
 }
 
 Set-Location $WorkDir
-"$(Get-Date -Format o) INFO: Starting Claude Remote Control '$RemoteName' in $WorkDir" | Out-File -FilePath $LogPath -Append
+"$(Get-Date -Format o) INFO: Starting Claude Remote Control '$RemoteName' in $WorkDir" | Out-File -FilePath $LogPath -Append -Encoding utf8
 
 while ($true) {
     try {
-        "$(Get-Date -Format o) INFO: Launching claude --remote-control $RemoteName" | Out-File -FilePath $LogPath -Append
+        "$(Get-Date -Format o) INFO: Launching claude --remote-control $RemoteName" | Out-File -FilePath $LogPath -Append -Encoding utf8
         & $ClaudeBin --remote-control $RemoteName 2>&1 | ForEach-Object {
             "$(Get-Date -Format o) $_"
-        } | Out-File -FilePath $LogPath -Append
+        } | Out-File -FilePath $LogPath -Append -Encoding utf8
     } catch {
-        "$(Get-Date -Format o) ERROR: $($_.Exception.Message)" | Out-File -FilePath $LogPath -Append
+        "$(Get-Date -Format o) ERROR: $($_.Exception.Message)" | Out-File -FilePath $LogPath -Append -Encoding utf8
     }
-    "$(Get-Date -Format o) INFO: Claude exited, restarting in 2 seconds..." | Out-File -FilePath $LogPath -Append
+    "$(Get-Date -Format o) INFO: Claude exited, restarting in 2 seconds..." | Out-File -FilePath $LogPath -Append -Encoding utf8
     Start-Sleep -Seconds 2
 }
 ```
@@ -372,7 +372,7 @@ Register a Scheduled Task using PowerShell. Do not create a service file on disk
 ```powershell
 $Action = New-ScheduledTaskAction `
   -Execute "powershell.exe" `
-  -Argument "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"{{SCRIPT_PATH}}`"" `
+  -Argument "-NoProfile -WindowStyle Hidden -ExecutionPolicy RemoteSigned -File `"{{SCRIPT_PATH}}`"" `
   -WorkingDirectory "{{WORKDIR}}"
 
 $Trigger = New-ScheduledTaskTrigger -AtLogon -User "$env:USERNAME"
@@ -383,13 +383,19 @@ $Settings = New-ScheduledTaskSettingsSet `
   -StartWhenAvailable `
   -RestartInterval (New-TimeSpan -Minutes 1) `
   -RestartCount 3 `
-  -ExecutionTimeLimit (New-TimeSpan -Days 9999)
+  -ExecutionTimeLimit ([TimeSpan]::Zero)
+
+$Principal = New-ScheduledTaskPrincipal `
+  -UserId "$env:USERNAME" `
+  -LogonType S4U `
+  -RunLevel Limited
 
 Register-ScheduledTask `
   -TaskName "{{TASK_NAME}}" `
   -Action $Action `
   -Trigger $Trigger `
   -Settings $Settings `
+  -Principal $Principal `
   -Description "Claude Code Remote Control session ({{REMOTE_NAME}}) with auto-restart" `
   -Force
 ```
@@ -397,7 +403,9 @@ Register-ScheduledTask `
 Rules:
 
 - `-WindowStyle Hidden` keeps the PowerShell window invisible — the user interacts via Remote Control, not the terminal
-- `-ExecutionTimeLimit` is set very high so Task Scheduler does not kill the long-running process
+- `-ExecutionTimeLimit ([TimeSpan]::Zero)` means no time limit — Task Scheduler will not kill the long-running process
+- `-LogonType S4U` ("Service for User") allows the task to run whether or not the user is logged on, enabling survive-logout behavior without storing a password. Note: S4U tasks cannot access network resources or encrypted files (EFS). If the user needs those, fall back to `-LogonType Password` and explain the tradeoff (password stored in Task Scheduler's credential store).
+- `-ExecutionPolicy RemoteSigned` allows locally-created scripts to run while blocking unsigned remote scripts. Only fall back to `Bypass` if the user explicitly confirms.
 - `-Force` makes the command idempotent — it replaces any existing task with the same name
 - `-StartWhenAvailable` ensures the task starts even if a scheduled run was missed (e.g., laptop was asleep)
 - do not use `Register-ScheduledTask` flags that require admin unless the user confirms admin access
@@ -442,16 +450,16 @@ tmux ls || true
 
 #### 7b) macOS
 
-First, unload any existing version (idempotent):
+First, remove any existing version (idempotent):
 
 ```bash
-launchctl unload "{{PLIST_PATH}}" 2>/dev/null || true
+launchctl bootout gui/$(id -u) "{{PLIST_PATH}}" 2>/dev/null || true
 ```
 
-Then load:
+Then bootstrap:
 
 ```bash
-launchctl load "{{PLIST_PATH}}"
+launchctl bootstrap gui/$(id -u) "{{PLIST_PATH}}"
 ```
 
 Then verify with:
@@ -527,7 +535,7 @@ Follow these rules strictly:
 - do not silently switch to server mode
 - **Linux:** do not claim reboot persistence unless both `systemd --user enable` succeeded and linger is enabled or already active
 - **macOS:** do not claim reboot persistence unless the plist is loaded with `RunAtLoad` set to `true` — note that macOS LaunchAgents run at login, not at cold boot before any user logs in
-- **Windows:** do not claim reboot persistence unless the Scheduled Task is registered with an `AtLogon` trigger — note that this runs at user login, not before any user logs in. For pre-login startup, a Windows Service (via NSSM) would be needed, which is out of scope for this skill.
+- **Windows:** do not claim reboot persistence unless the Scheduled Task is registered with an `AtLogon` trigger. With `LogonType S4U`, the task also survives logout. Note that the task runs at user login, not before any user logs in. For pre-login startup, a Windows Service (via NSSM) would be needed, which is out of scope for this skill.
 - if `claude auth status` suggests the user is not logged in, say so clearly and stop before pretending the remote session will work
 
 ### 10) Final response format
@@ -560,7 +568,7 @@ systemctl --user restart {{SERVICE_NAME}}
 tmux attach -t {{TMUX_SESSION}}
 launchctl list | grep {{PLIST_LABEL}}
 tail -f {{LOG_PATH}}
-launchctl unload {{PLIST_PATH}} && launchctl load {{PLIST_PATH}}
+launchctl bootout gui/$(id -u) {{PLIST_PATH}} && launchctl bootstrap gui/$(id -u) {{PLIST_PATH}}
 ```
 
 **Windows useful commands:**
@@ -595,7 +603,7 @@ systemctl --user daemon-reload
 
 macOS:
 ```bash
-launchctl unload {{PLIST_PATH}}
+launchctl bootout gui/$(id -u) {{PLIST_PATH}}
 rm {{PLIST_PATH}}
 rm {{SCRIPT_PATH}}
 ```
