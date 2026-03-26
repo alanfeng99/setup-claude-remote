@@ -29,7 +29,7 @@ The result is a Claude Code Remote Control session that is always available — 
 ### As a Claude Code Skill
 
 ```bash
-claude skill add --name setup-claude-remote --url https://github.com/alanfeng/setup-claude-remote
+claude skill add --name setup-claude-remote --url https://github.com/alanfeng99/setup-claude-remote
 ```
 
 Or manually copy `SKILL.md` to your Claude Code skills directory:
