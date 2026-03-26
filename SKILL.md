@@ -553,6 +553,13 @@ At the end, always report:
 - the exact commands to inspect or manage (platform-appropriate)
 - any remaining manual step, if one still exists
 
+**Connection reminder:** Always include a note reminding the user to verify they have a client that can connect to the Remote Control session. Do not require or check for a specific plugin — just inform:
+
+> Ensure you have a way to connect to this Remote Control session. Common options:
+> - Claude Code CLI from another terminal: `claude`
+> - Telegram plugin: `claude plugin install telegram@claude-plugins-official`
+> - Web client or API
+
 **Linux useful commands:**
 
 ```bash
